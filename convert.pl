@@ -64,6 +64,8 @@ if($RUN == 1)
 		{
 			print "Found title: ".$1."\n";
 			$titles[$numTitles-1]{'name'} = $1;
+			$titles[$numTitles-1]{'outputname'} = sprintf("%.2d-%s", $numTitles, $1);
+			$titles[$numTitles-1]{'outputname'} =~ s/://g;
 		}
 	}
 
@@ -93,7 +95,7 @@ for(my $i = 0; $i < @titles; $i++)
 	print $titles[$i]{'filename'}."\n";
 	print $titles[$i]{'length'}."\n\n";
 	
-	if(-e $titles[$i]{'name'}.".mkv")
+	if(-e $titles[$i]{'outputname'}.".mkv")
 	{
 		print "Title allready muxed, skipping.\n";
 		next;
@@ -175,7 +177,7 @@ for(my $i = 0; $i < @titles; $i++)
 #		5: AC3, English, 2.0 channels, 256kbps, 48kHz
 			#elsif($_ =~ m/(\d+)\: ([\w\-\/]+),(.*)/)
 			#elsif($_ =~ m/(\d+)\: (E-AC3|AC3|E-AC3 Surround), (\w*), ([\d\.]+) channels, ([\d]+kbps), ([\d]+kHz), (.*)/)
-			elsif($_ =~ m/(\d+)\: (E-AC3|AC3)/)
+			elsif($_ =~ m/(\d+)\: (E-AC3|AC3|TrueHD)/)
 			{
 				print "Found audio track:\n".$_."\n";
 				#print $1."\n";
@@ -231,7 +233,7 @@ for(my $i = 0; $i < @titles; $i++)
 
 	print "--------\n\n";
 
-	my $dir = sprintf("%.2d-%s", $i+1, $titles[$i]{'name'});
+	my $dir = $titles[$i]{'outputname'};
 	print $dir."\n";
 	mkdir $dir;
 	chdir $dir;
@@ -246,7 +248,7 @@ for(my $i = 0; $i < @titles; $i++)
 			open (RESULT, $cmd."|") || die "Failed: $!\n";
 			while(<RESULT>)
 			{
-				#print $_;
+				print LOGFILE $_;
 				
 				# Subtitle file
 				if($_ =~ m/([asv])(\d\d) Creating file \"(.*)\"/)
@@ -323,8 +325,8 @@ for(my $i = 0; $i < @titles; $i++)
 	{
 			print "\n**** MKVMerge ****\n";
 			my $cmd = $mkvmerge;
-			$cmd .= " --output \"../".$title{'name'}.".mkv\"";
-			$cmd .= " --title '".$title{'name'}."'";
+			$cmd .= " --output \"../".$title{'outputname'}.".mkv\"";
+			$cmd .= " --title \"".$title{'name'}."\"";
 
 			# TODO: Find all video tracks
 			for(my $t = 0; $t < scalar @{$title{'vtracks'}}; $t++)
@@ -343,17 +345,24 @@ for(my $i = 0; $i < @titles; $i++)
 					}
 				}
 								
-				$cmd .= " --track-name 0:'";
+				$cmd .= " --track-name 0:\"";
 				if(defined($l = ${$title{'atracks'}}[$t]{'description'}))
 				{
 					$cmd .= $l.", ";
 				}
-				$cmd .= ${$title{'atracks'}}[$t]{'codec'}.", ".${$title{'atracks'}}[$t]{'channels'}." channels, ".${$title{'atracks'}}[$t]{'bitrate'}.", ".${$title{'atracks'}}[$t]{'samplerate'}."'";
+				
+				# TODO: Split up an check for defined values
+				$cmd .= ${$title{'atracks'}}[$t]{'codec'}.", ".${$title{'atracks'}}[$t]{'channels'}." channels, ".${$title{'atracks'}}[$t]{'bitrate'}.", ".${$title{'atracks'}}[$t]{'samplerate'}."\"";
+				
 				$cmd .= " \"".${$title{'atracks'}}[$t]{'file'}."\"";
 			}
 			
 			for(my $t = 0; $t < scalar @{$title{'subtitles'}}; $t++)
 			{
+				if(not defined ${$title{'subtitles'}}[$t]{'file'} or (length(${$title{'subtitles'}}[$t]{'file'})  < 2))
+				{
+					next;
+				}
 				my $l;
 				if(defined ($l = ${$title{'subtitles'}}[$t]{'language'}))
 				{
@@ -365,7 +374,7 @@ for(my $i = 0; $i < @titles; $i++)
 				
 				if(defined($l = ${$title{'subtitles'}}[$t]{'desc'}) && (length($l) >0))
 				{
-					$cmd .= " --track-name 0:'$l'";
+					$cmd .= " --track-name 0:\"".$l."\"";
 				}
 
 				$cmd .= " \"".${$title{'subtitles'}}[$t]{'file'}."\"";
