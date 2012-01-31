@@ -27,16 +27,21 @@ my $numTitles = 0;
 my @titles;
 #my @titleinfo;
 
+
+# For storing language codes
 my %langtable = ();
 
+# Gets language codes from mkvmerge
 languages();
 
+# Used for debugging
 my $RUN = 1;
 
 
 if($RUN == 1)
 {
 	open(LOGFILE, ">", "scriptlog.txt")  || die "Failed to open log: $!\n";
+	
 	# Run eac3to to get general info about the disc
 	open(RESULT, $eac3to."|") || die "Failed: $!\n";
 
@@ -87,8 +92,8 @@ my $MKVMERGE = 1;
 
 
 print "----- DEMUX and TITLEINFO ------\n";
-#for(my $i = 0; $i < @titles; $i++)
-for(my $i = 1; $i < 2; $i++)
+for(my $i = 0; $i < @titles; $i++)
+#for(my $i = 1; $i < 2; $i++)
 {
 	#Print out what info we got before moving on
 	print $titles[$i]{'name'}."\n";
@@ -354,6 +359,10 @@ for(my $i = 1; $i < 2; $i++)
 				$divider = $title{'vtracks'}[$t]{'divider'};
 				if(defined($fps) && defined($divider))
 				{
+					if($title{'vtracks'}[$t]{'field'} eq 'i')
+					{
+						$fps = $fps / 2;
+					}
 					#$cmd .= " --default-duration 0:".($fps/$divider)."fps";
 					$cmd .= " --default-duration 0:".$fps."/".$divider."fps";
 				}
