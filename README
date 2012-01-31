@@ -1,0 +1,8 @@
+Perl script for converting HD-DVDs to MKV
+Only remuxing
+
+Uses eac3to, bdsup4sub and mkvmerge
+
+Provided AS IS, with no guarantees.
+
+

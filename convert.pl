@@ -87,8 +87,8 @@ my $MKVMERGE = 1;
 
 
 print "----- DEMUX and TITLEINFO ------\n";
-for(my $i = 0; $i < @titles; $i++)
-#for(my $i = 0; $i < 1; $i++)
+#for(my $i = 0; $i < @titles; $i++)
+for(my $i = 1; $i < 2; $i++)
 {
 	#Print out what info we got before moving on
 	print $titles[$i]{'name'}."\n";
@@ -155,7 +155,7 @@ for(my $i = 0; $i < @titles; $i++)
 			
 			# Get information about the video track
 #		2: VC-1, 1080p30 /1.001 (16:9)
-			elsif($_ =~ m/(\d+)\: (MPEG2|VC-1), (\d+)(i|p)(\d+)/ )
+			elsif($_ =~ m/(\d+)\: (MPEG2|VC-1|h264\/AVC), (\d+)(i|p)(\d+) \/([\d\.]+) \(([\d+\:]+)\)/i )
 			{
 				print "Found video track:\n".$_."\n";
 				print "Codec: ".$2."\n";
@@ -163,8 +163,21 @@ for(my $i = 0; $i < @titles; $i++)
 				print "Frame method: ".$4."\n";
 				print "\n";
 				
+				
+				
 				#my @track = ($1, $2, $3, $4);
-				my %track = ('trackno' => $1, 'codec' => $2, 'resolution' => $3, 'field' => $4, 'framerate' => $5);
+				my %track = ('trackno' => $1, 'codec' => $2, 'resolution' => $3, 'field' => $4, 'framerate' => $5, 'divider' => $6, 'aspect' => $7);
+
+				my $divider = $6;
+				my $framerate = $5;
+				
+				$divider =~ m/\d+\.(\d+)/;
+				#print length($1)."\n";
+				$divider = $divider*(10**length($1));
+				$framerate = $framerate*(10**length($1));
+				$track{'framerate'} = $framerate;
+				$track{'divider'} = $divider;
+
 				#push (@vtracks, \@track);
 				push (@vtracks, \%track);
 				#$vtracks[$1] = \@track;
@@ -328,15 +341,30 @@ for(my $i = 0; $i < @titles; $i++)
 			$cmd .= " --output \"../".$title{'outputname'}.".mkv\"";
 			$cmd .= " --title \"".$title{'name'}."\"";
 
-			# TODO: Find all video tracks
+			# Add all video tracks to command line
 			for(my $t = 0; $t < scalar @{$title{'vtracks'}}; $t++)
 			{
+				if(defined($title{'name'}))
+				{
+					$cmd .=" --track-name 0:\"".$title{'name'}."\"";
+				}
+				my $fps;
+				my $divider;
+				$fps = $title{'vtracks'}[$t]{'framerate'};
+				$divider = $title{'vtracks'}[$t]{'divider'};
+				if(defined($fps) && defined($divider))
+				{
+					#$cmd .= " --default-duration 0:".($fps/$divider)."fps";
+					$cmd .= " --default-duration 0:".$fps."/".$divider."fps";
+				}
 				$cmd .= " \"".${$title{'vtracks'}}[$t]{'file'}."\"";
 			}
 
+			# Add all audio tracks to command line
 			for(my $t = 0; $t < scalar @{$title{'atracks'}}; $t++)
 			{
 				my $l;
+				#Add language identifier, if we have it
 				if(defined ($l = ${$title{'atracks'}}[$t]{'language'}))
 				{
 					if(defined $langtable{lc($l)})
@@ -346,13 +374,37 @@ for(my $i = 0; $i < @titles; $i++)
 				}
 								
 				$cmd .= " --track-name 0:\"";
+				
 				if(defined($l = ${$title{'atracks'}}[$t]{'description'}))
 				{
 					$cmd .= $l.", ";
 				}
+
+				if(defined($l = ${$title{'atracks'}}[$t]{'language'}))
+				{
+					$cmd .= ucfirst($l).", ";
+				}
 				
 				# TODO: Split up an check for defined values
-				$cmd .= ${$title{'atracks'}}[$t]{'codec'}.", ".${$title{'atracks'}}[$t]{'channels'}." channels, ".${$title{'atracks'}}[$t]{'bitrate'}.", ".${$title{'atracks'}}[$t]{'samplerate'}."\"";
+				if(defined(${$title{'atracks'}}[$t]{'codec'}))
+				{
+					$cmd .= ${$title{'atracks'}}[$t]{'codec'}.", ";
+				}
+				
+				if(defined(${$title{'atracks'}}[$t]{'channels'}))
+				{
+					$cmd .= ${$title{'atracks'}}[$t]{'channels'}." channels, ";
+				}
+				
+				if(defined(${$title{'atracks'}}[$t]{'bitrate'}))
+				{
+					$cmd .= ${$title{'atracks'}}[$t]{'bitrate'}.", ";
+				}
+				
+				if(defined(${$title{'atracks'}}[$t]{'samplerate'}))
+				{
+					$cmd .= ${$title{'atracks'}}[$t]{'samplerate'}."\"";
+				}
 				
 				$cmd .= " \"".${$title{'atracks'}}[$t]{'file'}."\"";
 			}
@@ -390,7 +442,10 @@ for(my $i = 0; $i < @titles; $i++)
 			system($cmd);
 		}
 
-		chdir '..';	
+		chdir '..';
+		
+		#Remove demuxed files after muxing is complete
+		system('rm', '-r', $dir);
 }
 
 	close LOGFILE;
