@@ -8,6 +8,9 @@ use feature 'say';
 
 use File::Copy;
 
+use Getopt::Long;
+
+
 # Path to eac3to
 my $eac3to = '/cygdrive/c/utils/video/eac3to/eac3to.exe';
 
@@ -19,6 +22,10 @@ my $bdsup2sub = 'c:\\\\utils\\\\video\\\\BDSup2Sub400.jar';
 
 # path to mkvmerge
 my $mkvmerge = '/cygdrive/c/utils/video/mkvtoolnix/mkvmerge.exe';
+
+
+# Source data
+my $source ="";
 
 #Number of titles on disc
 my $numTitles = 0;
@@ -37,6 +44,12 @@ languages();
 # Used for debugging
 my $RUN = 1;
 
+GetOptions('source=s' => \$source);
+
+if(length($source)>1)
+{
+	$eac3to.=" ".$source;
+}
 
 if($RUN == 1)
 {
@@ -141,13 +154,21 @@ for(my $i = 0; $i < @titles; $i++)
 			}
 			# Get the languages and description of subtitle tracks.
 			#		6: Subtitle (DVD), English
-			elsif($_ =~ m/(\d+)\: Subtitle \(DVD\), (\w+)(.*)/)
+			#elsif($_ =~ m/(\d+)\: Subtitle \(DVD\), (\w*)(.*)/)
+			elsif($_ =~ m/(\d+)\: Subtitle \(DVD\)(.*)/)
 			{
 				print "Found subtitle track:\n".$_."\n";
-				my $language = $2;
 				my $trackno = $1;
+				my $language = "";
 				my $desc = "";
-				if($3 =~ m/, \"(.*)\"/)
+				my $rest = $2;
+				if($rest =~ m/, (\w+)(.*)/)
+				{
+					$language = $1;
+					$rest = $2;
+				}
+				
+				if($rest =~ m/, \"(.*)\"/)
 				{
 						$desc = $1;
 				}
@@ -195,7 +216,7 @@ for(my $i = 0; $i < @titles; $i++)
 #		5: AC3, English, 2.0 channels, 256kbps, 48kHz
 			#elsif($_ =~ m/(\d+)\: ([\w\-\/]+),(.*)/)
 			#elsif($_ =~ m/(\d+)\: (E-AC3|AC3|E-AC3 Surround), (\w*), ([\d\.]+) channels, ([\d]+kbps), ([\d]+kHz), (.*)/)
-			elsif($_ =~ m/(\d+)\: (E-AC3|AC3|TrueHD)/)
+			elsif($_ =~ m/(\d+)\: (E-AC3|AC3|TrueHD|DTS)/)
 			{
 				print "Found audio track:\n".$_."\n";
 				#print $1."\n";
@@ -215,6 +236,11 @@ for(my $i = 0; $i < @titles; $i++)
 				if($_ =~ m/ ([\d\.]+kHz)/)
 				{
 					$track{'samplerate'} = $1;
+				}
+				
+				if($_ =~ m/ ([\d]+ bits)/)
+				{
+					$track{'bits'} = $1;
 				}
 				
 				for my $key (keys %langtable)
@@ -258,7 +284,12 @@ for(my $i = 0; $i < @titles; $i++)
 
 	if($DEMUX == 1)
 	{
-		my $cmd = $eac3to.' .. '.($i+1).'\)'.' '.$eac3to_demux;
+		my $cmd = $eac3to;
+		if(length($source)<1)
+		{
+			$cmd .= ' ..';
+		}
+		$cmd .= ' '.($i+1).'\)'.' '.$eac3to_demux;
 		print LOGFILE $cmd."\n";
 		if($TRUEDEMUX == 1)
 		{
@@ -411,12 +442,17 @@ for(my $i = 0; $i < @titles; $i++)
 				{
 					$cmd .= ${$title{'atracks'}}[$t]{'channels'}." channels, ";
 				}
-				
+
+				if(defined(${$title{'atracks'}}[$t]{'bits'}))
+				{
+					$cmd .= ${$title{'atracks'}}[$t]{'bits'}.", ";
+				}
+								
 				if(defined(${$title{'atracks'}}[$t]{'bitrate'}))
 				{
 					$cmd .= ${$title{'atracks'}}[$t]{'bitrate'}.", ";
 				}
-				
+
 				if(defined(${$title{'atracks'}}[$t]{'samplerate'}))
 				{
 					$cmd .= ${$title{'atracks'}}[$t]{'samplerate'}."\"";
