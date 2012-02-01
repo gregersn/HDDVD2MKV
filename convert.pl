@@ -299,12 +299,19 @@ for(my $i = 0; $i < @titles; $i++)
 					print "Chapters file ".$1."\n";
 					$titles[$i]{'chapters_file'} = $1;
 				}
-				elsif($_ =~ m/Subtitle track (\d+) contains (\d+) captions./)
+				elsif($_ =~ m/Subtitle track (\d+) contains (\d+) caption|captions./)
 				{
 					#print $_."\n";
 					my $tr =  int($1);
 					my $cnt =  $2;
-					$titles[$i]{'subtitles'}[findtrack($titles[$i]{'subtitles'}, $tr)]->{'file'} =~ s/\.sup/, $cnt captions\.sup/;
+					if($cnt > 1)
+					{
+						$titles[$i]{'subtitles'}[findtrack($titles[$i]{'subtitles'}, $tr)]->{'file'} =~ s/\.sup/, $cnt captions\.sup/;
+					}
+					else
+					{
+						$titles[$i]{'subtitles'}[findtrack($titles[$i]{'subtitles'}, $tr)]->{'file'} =~ s/\.sup/, $cnt caption\.sup/;
+					}
 					#$titles[$i]{'subtitles'}[$tr][2]  =~ s/\.sup/, $cnt captions\.sup/;
 				}
 			}
