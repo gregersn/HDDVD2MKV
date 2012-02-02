@@ -25,7 +25,8 @@ my $mkvmerge = '/cygdrive/c/utils/video/mkvtoolnix/mkvmerge.exe';
 
 
 # Source data
-my $source ="";
+#my $source ="";
+my %options = ('source' => '', 'title' => 0, 'keepsubs' => '');
 
 #Number of titles on disc
 my $numTitles = 0;
@@ -44,12 +45,30 @@ languages();
 # Used for debugging
 my $RUN = 1;
 
-GetOptions('source=s' => \$source);
+#Get titleinfo
+my $TITLEINFO = 1;
 
-if(length($source)>1)
+# Demux
+my $DEMUX = 1;
+
+#Actually demux
+my $TRUEDEMUX = 1;
+
+#Convert subtitles
+my $SUBTITLES = 1;
+
+my $MKVMERGE = 1;
+
+
+GetOptions('source=s' => \$options{'source'}, 'title=i' => \$options{'title'}, 'keepsubs=s' => \$options{'keepsubs'});
+#GetOptions('title=s' => \$options{'title'});
+
+
+if(length($options{'source'})>1)
 {
-	$eac3to.=" ".$source;
+	$eac3to.=" ".$options{'source'};
 }
+
 
 if($RUN == 1)
 {
@@ -80,7 +99,7 @@ if($RUN == 1)
 		# Line containing title name
 		if(!$titles[$numTitles-1]{'name'} && $_ =~m/^\x08+ +\"(.*)\"/)
 		{
-			print "Found title: ".$1."\n";
+			print "Found title: ".$numTitles.") ".$1."\n";
 			$titles[$numTitles-1]{'name'} = $1;
 			$titles[$numTitles-1]{'outputname'} = sprintf("%.2d-%s", $numTitles, $1);
 			$titles[$numTitles-1]{'outputname'} =~ s/://g;
@@ -89,25 +108,37 @@ if($RUN == 1)
 
 	close(RESULT);
 
-#Get titleinfo
-my $TITLEINFO = 1;
 
-# Demux
-my $DEMUX = 1;
+	print "----- DEMUX and TITLEINFO ------\n";
+	
+	if($options{'title'} > 0)
+	{
+		if($options{'title'} > @titles)
+		{
+			print "*** ERROR: No title number ".$options{'title'}."\n";
+		}
+		else
+		{
+			process_title($options{'title'}-1);
+		}
+		
+	}
+	else
+	{
+		for(my $i = 0; $i < @titles; $i++)
+		{
+		#for(my $i = 1; $i < 2; $i++)
+			process_title($i);
+		}
+	}
+	close LOGFILE;
 
-#Actually demux
-my $TRUEDEMUX = 1;
+}
 
-#Convert subtitles
-my $SUBTITLES = 1;
-
-my $MKVMERGE = 1;
-
-
-print "----- DEMUX and TITLEINFO ------\n";
-for(my $i = 0; $i < @titles; $i++)
-#for(my $i = 1; $i < 2; $i++)
+sub process_title
 {
+	my($i) = @_;
+	
 	#Print out what info we got before moving on
 	print $titles[$i]{'name'}."\n";
 	print $titles[$i]{'filename'}."\n";
@@ -115,8 +146,9 @@ for(my $i = 0; $i < @titles; $i++)
 	
 	if(-e $titles[$i]{'outputname'}.".mkv")
 	{
-		print "Title allready muxed, skipping.\n";
-		next;
+		print "Title already muxed, skipping.\n";
+		#next;
+		return;
 	}
 	
 	if($TITLEINFO == 1)
@@ -173,6 +205,11 @@ for(my $i = 0; $i < @titles; $i++)
 						$desc = $1;
 				}
 				my %subt = ( 'trackno' => $trackno, 'language' => $language, 'desc' => $desc);
+				
+				if($rest =~ m/forced/i)
+				{
+					$subt{'forced'} = 1;
+				}
 				#$subtitles[$trackno] = \@subt;
 				#say Dumper($subt);
 				push (@subtitles, \%subt);
@@ -285,7 +322,7 @@ for(my $i = 0; $i < @titles; $i++)
 	if($DEMUX == 1)
 	{
 		my $cmd = $eac3to;
-		if(length($source)<1)
+		if(length($options{'source'})<1)
 		{
 			$cmd .= ' ..';
 		}
@@ -480,6 +517,11 @@ for(my $i = 0; $i < @titles; $i++)
 				{
 					$cmd .= " --track-name 0:\"".$l."\"";
 				}
+				
+				if(defined($l = ${$title{'subtitles'}}[$t]{'forced'}) && ($l == 1))
+				{
+					$cmd .= " --forced-flag 0";
+				}
 
 				$cmd .= " \"".${$title{'subtitles'}}[$t]{'file'}."\"";
 			}
@@ -500,9 +542,7 @@ for(my $i = 0; $i < @titles; $i++)
 		system('rm', '-r', $dir);
 }
 
-	close LOGFILE;
 
-}
 
 sub findtrack
 {
