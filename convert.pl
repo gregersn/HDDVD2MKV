@@ -26,7 +26,8 @@ my $mkvmerge = '/cygdrive/c/utils/video/mkvtoolnix/mkvmerge.exe';
 
 
 # Source data
-my %options = ('source' => '', 'title' => 0, 'keeplangs' => '', 'input' => '');
+my @langs = ();
+my %options = ('source' => '', 'title' => 0, 'keeplangs' => '', 'langs' => \@langs, 'input' => '');
 
 #Number of titles on disc
 my $numTitles = 0;
@@ -71,9 +72,10 @@ if(length($options{'source'})>1)
 if(length($options{'keeplangs'}) > 1)
 {
 	my @langs = split(/,/,$options{'keeplangs'});
-	$options{'keeplangs'} = \@langs;
+	$options{'langs'} = \@langs;
 	#print $options{'keeplangs'};
 }
+
 
 
 if($RUN == 1)
@@ -474,7 +476,7 @@ sub process_title
 				{
 					if(defined $langtable{lc($l)})
 					{
-						if(!in_array($options{'keeplangs'}, lc($l)))
+						if((scalar @{$options{'langs'}} > 0) && (!in_array($options{'langs'}, lc($l))))
 						{
 							next;
 						}
@@ -542,7 +544,7 @@ sub process_title
 				{
 					if(defined $langtable{lc($l)})
 					{
-						if(!in_array($options{'keeplangs'}, lc($l)))
+						if((scalar @{$options{'langs'}} > 0) && (!in_array($options{'langs'}, lc($l))))						
 						{
 							next;
 						}
@@ -603,7 +605,7 @@ sub process_title
 				{
 					if(defined $langtable{lc($l)})
 					{
-						if(!in_array($options{'keeplangs'}, lc($l)))
+						if((scalar @{$options{'langs'}} > 0) && (!in_array($options{'langs'}, lc($l))))
 						{
 							next;
 						}
