@@ -10,6 +10,7 @@ use File::Copy;
 
 use Getopt::Long;
 
+use Cwd;
 
 # Path to eac3to
 my $eac3to = '/cygdrive/c/utils/video/eac3to/eac3to.exe';
@@ -25,16 +26,13 @@ my $mkvmerge = '/cygdrive/c/utils/video/mkvtoolnix/mkvmerge.exe';
 
 
 # Source data
-#my $source ="";
-my %options = ('source' => '', 'title' => 0, 'keepsubs' => '');
+my %options = ('source' => '', 'title' => 0, 'keeplangs' => '', 'input' => '');
 
 #Number of titles on disc
 my $numTitles = 0;
 
 # Array with title info
 my @titles;
-#my @titleinfo;
-
 
 # For storing language codes
 my %langtable = ();
@@ -59,8 +57,9 @@ my $SUBTITLES = 1;
 
 my $MKVMERGE = 1;
 
+my $startdir = getcwd;
 
-GetOptions('source=s' => \$options{'source'}, 'title=i' => \$options{'title'}, 'keepsubs=s' => \$options{'keepsubs'});
+GetOptions('source=s' => \$options{'source'}, 'title=i' => \$options{'title'}, 'keeplangs=s' => \$options{'keeplangs'}, 'input=s' => \$options{'input'});
 #GetOptions('title=s' => \$options{'title'});
 
 
@@ -69,11 +68,74 @@ if(length($options{'source'})>1)
 	$eac3to.=" ".$options{'source'};
 }
 
+if(length($options{'keeplangs'}) > 1)
+{
+	my @langs = split(/,/,$options{'keeplangs'});
+	$options{'keeplangs'} = \@langs;
+	#print $options{'keeplangs'};
+}
+
 
 if($RUN == 1)
 {
 	open(LOGFILE, ">", "scriptlog.txt")  || die "Failed to open log: $!\n";
 	
+	if(length($options{'input'}) > 0)
+	{
+		file_info($options{'input'});
+		process_title($options{'input'});
+	}
+	
+	if(length($options{'input'}) < 1)
+	{
+		disc_info();
+		print "----- DEMUX and TITLEINFO ------\n";
+		
+		if($options{'title'} > 0)
+		{
+			if($options{'title'} > @titles)
+			{
+				print "*** ERROR: No title number ".$options{'title'}."\n";
+			}
+			else
+			{
+				process_title($options{'title'}-1);
+			}
+			
+		}
+		else
+		{
+			for(my $i = 0; $i < @titles; $i++)
+			{
+			#for(my $i = 1; $i < 2; $i++)
+				process_title($i);
+			}
+		}
+	}
+	close LOGFILE;
+
+}
+
+sub file_info
+{
+	my($input) = @_;
+	print $input."\n";
+	my %titleinfo;
+	$titleinfo{'filename'} = $input;
+	$titleinfo{'outputname'} = "test";
+	$titles[0] = \%titleinfo;
+
+	open(RESULT, $eac3to." ".$input."|") || die "Failed: $!\n";
+	while(<RESULT>)
+	{
+		print $_."\n";
+	}
+	
+	close(RESULT);
+}
+
+sub disc_info
+{
 	# Run eac3to to get general info about the disc
 	open(RESULT, $eac3to."|") || die "Failed: $!\n";
 
@@ -108,48 +170,35 @@ if($RUN == 1)
 
 	close(RESULT);
 
-
-	print "----- DEMUX and TITLEINFO ------\n";
-	
-	if($options{'title'} > 0)
-	{
-		if($options{'title'} > @titles)
-		{
-			print "*** ERROR: No title number ".$options{'title'}."\n";
-		}
-		else
-		{
-			process_title($options{'title'}-1);
-		}
-		
-	}
-	else
-	{
-		for(my $i = 0; $i < @titles; $i++)
-		{
-		#for(my $i = 1; $i < 2; $i++)
-			process_title($i);
-		}
-	}
-	close LOGFILE;
-
 }
 
 sub process_title
 {
 	my($i) = @_;
-	
-	#Print out what info we got before moving on
-	print $titles[$i]{'name'}."\n";
-	print $titles[$i]{'filename'}."\n";
-	print $titles[$i]{'length'}."\n\n";
-	
-	if(-e $titles[$i]{'outputname'}.".mkv")
+	my $cmd = "";
+	my $filemode = 0;
+	if($i =~ /^\d+$/)
 	{
-		print "Title already muxed, skipping.\n";
-		#next;
-		return;
+		#Print out what info we got before moving on
+		print $titles[$i]{'name'}."\n";
+		print $titles[$i]{'filename'}."\n";
+		print $titles[$i]{'length'}."\n\n";
+	
+		if(-e $titles[$i]{'outputname'}.".mkv")
+		{
+			print "Title already muxed, skipping.\n";
+			#next;
+			return;
+		}
+		$cmd = $eac3to.' '.($i+1).'\)';
 	}
+	else
+	{
+		$cmd = $eac3to.' '.($i);
+		$i = 0;
+		$filemode = 1;
+	}
+	
 	
 	if($TITLEINFO == 1)
 	{
@@ -160,7 +209,6 @@ sub process_title
 		my @subtitles; # Subtitle tracks
 		
 		# Run eac3to to get info about specific title
-		my $cmd = $eac3to.' '.($i+1).'\)';
 		print LOGFILE $cmd."\n";  # For debugging
 		
 		open(RESULT, $cmd."|") || die "Failed: $!\n";
@@ -168,12 +216,27 @@ sub process_title
 		{
 			# Get general information about the title. Number of video, audio and sub tracks
 #			EVO, 1 video track, 3 audio tracks, 1 subtitle track, 1:32:28
-			if($_ =~ m/(\w+),\s(\d+)\svideo.*,\s(\d+)\saudio.*,\s(\d+)\ssubtitle.*,\s(.*)/)
+			if($_ =~ m/(EVO)(.*)/)
 			{
 				$titles[$i]{'container'} = $1;
-				$titles[$i]{'tracks_video'} = $2;
-				$titles[$i]{'tracks_audio'} = $3;
-				$titles[$i]{'tracks_sub'} = $4;
+				my $rest = $2;
+				
+				if($rest =~ m/(\d+)\svideo/)
+				{
+					$titles[$i]{'tracks_video'} = $1;
+				}
+				if($rest =~ m/(\d+)\saudio/)
+				{
+					$titles[$i]{'tracks_audio'} = $1;
+				}
+				if($rest =~ m/(\d+)\ssubtitle/)
+				{				
+					$titles[$i]{'tracks_sub'} = $1;
+				}
+				if($rest =~ m/(\d+:\d+:\d+)/)
+				{
+					$titles[$i]{'length'} = $1;
+				}
 
 			}
 			
@@ -316,17 +379,24 @@ sub process_title
 
 	my $dir = $titles[$i]{'outputname'};
 	print $dir."\n";
-	mkdir $dir;
-	chdir $dir;
 
 	if($DEMUX == 1)
 	{
 		my $cmd = $eac3to;
-		if(length($options{'source'})<1)
+		if($filemode == 0)
 		{
-			$cmd .= ' ..';
+			mkdir $dir;
+			chdir $dir;
+			if(length($options{'source'})<1)
+			{
+				$cmd .= ' ..';
+			}
+			$cmd .= ' '.($i+1).'\)'.' '.$eac3to_demux;	
 		}
-		$cmd .= ' '.($i+1).'\)'.' '.$eac3to_demux;
+		if($filemode == 1)
+		{
+			$cmd .= ' '.$titles[$i]{'filename'}.' '.$eac3to_demux;	
+		}
 		print LOGFILE $cmd."\n";
 		if($TRUEDEMUX == 1)
 		{
@@ -400,6 +470,17 @@ sub process_title
 			#for(my $sub = 0; $sub < scalar(@{$title{'subtitles'}}); $sub++)
 			for(my $sub = 0; $sub < scalar @{$titles[$i]->{'subtitles'}}; $sub++)
 			{
+				if(defined (my $l = ${$title{'subtitles'}}[$sub]{'language'}))
+				{
+					if(defined $langtable{lc($l)})
+					{
+						if(!in_array($options{'keeplangs'}, lc($l)))
+						{
+							next;
+						}
+					}
+				}
+
 				#print $title{'subtitles'}[$sub][2]."\n";
 				my $infile = ${$title{'subtitles'}[$sub]}{'file'};
 				if(defined $infile)
@@ -418,8 +499,16 @@ sub process_title
 	{
 			print "\n**** MKVMerge ****\n";
 			my $cmd = $mkvmerge;
-			$cmd .= " --output \"../".$title{'outputname'}.".mkv\"";
-			$cmd .= " --title \"".$title{'name'}."\"";
+			$cmd .= " --output \"";
+			if($filemode == 0)
+			{
+				$cmd .="../";
+			}
+			$cmd .= $title{'outputname'}.".mkv\"";
+			if(defined(my $t = $title{'name'}))
+			{
+				$cmd .= " --title \"".$t."\"";
+			}
 
 			# Add all video tracks to command line
 			for(my $t = 0; $t < scalar @{$title{'vtracks'}}; $t++)
@@ -453,6 +542,11 @@ sub process_title
 				{
 					if(defined $langtable{lc($l)})
 					{
+						if(!in_array($options{'keeplangs'}, lc($l)))
+						{
+							next;
+						}
+
 						$cmd .= " --language 0:".$langtable{lc($l)};
 					}
 				}
@@ -509,6 +603,10 @@ sub process_title
 				{
 					if(defined $langtable{lc($l)})
 					{
+						if(!in_array($options{'keeplangs'}, lc($l)))
+						{
+							next;
+						}
 						$cmd .= " --language 0:".$langtable{lc($l)};
 					}
 				}
@@ -535,15 +633,52 @@ sub process_title
 			print LOGFILE $cmd."\n";
 			system($cmd);
 		}
-
-		chdir '..';
+		cleanup(\%title);
+		if($filemode == 0)
+		{
+			chdir '..';
 		
-		#Remove demuxed files after muxing is complete
-		system('rm', '-r', $dir);
+			#Remove demuxed files after muxing is complete
+			system('rm', '-r', $dir);
+		}
+}
+
+# Loop through all the tracks, and delete all files
+# Used after mkvmerge
+sub cleanup
+{
+	print "---- Cleanup --- \n";
+	my($title) = @_;
+	
+	print ${title}->{'filename'}."\n";
+
+	for(my $t = 0; $t < scalar @{${title}->{'atracks'}}; $t++)
+	{
+		print ${${title}->{'atracks'}}[$t]{'file'}."\n";
+		system('rm', ${${title}->{'atracks'}}[$t]{'file'});
+	}
+
+	for(my $t = 0; $t < scalar @{${title}->{'vtracks'}}; $t++)
+	{
+		print ${${title}->{'vtracks'}}[$t]{'file'}."\n";
+		system('rm', ${${title}->{'vtracks'}}[$t]{'file'});
+	}
+
+	for(my $t = 0; $t < scalar @{${title}->{'subtitles'}}; $t++)
+	{
+		print ${${title}->{'subtitles'}}[$t]{'file'}."\n";
+		system('rm', ${${title}->{'subtitles'}}[$t]{'file'});
+	}
+	
+	if(defined ${title}->{'chapters_file'})
+	{
+		print ${title}->{'chapters_file'}."\n";
+		system('rm',  ${title}->{'chapters_file'});
+	}
 }
 
 
-
+# Finds array index of specific track number 
 sub findtrack
 {
 	my($tracks, $track) = @_;
@@ -556,6 +691,8 @@ sub findtrack
 	}
 }
 
+# Sets up a language table based on mkvmerges internal language table
+# Used for giving mkvmerge the right language codes corresponding to a language
 sub languages
 {
 	#open FILE, "<", "langs.txt" or die $!;
@@ -601,8 +738,11 @@ sub languages
 		$i++;
 	}
 	close FILE;
-	
-	
-	#say Dumper(\%langtable);
-#	print $langtable{'english'}."\n";
+}
+
+sub in_array
+{
+	my($arr, $value) = @_;
+	my %items = map {$_ => 1} @$arr;
+	return (exists($items{$value}))?1:0;
 }
